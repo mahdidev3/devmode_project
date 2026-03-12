@@ -12,3 +12,4 @@ venv/
 runtime/
 dist/
 build/
+curunt.state
