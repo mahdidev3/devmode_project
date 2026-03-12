@@ -251,9 +251,9 @@ git commit -m "Initial refactor for devmode project"
 Connect to GitHub.
 
 ``` bash
-git branch -M main
-git remote add origin <your-github-repo-url>
-git push -u origin main
+git branch -M master
+git remote add origin https://github.com/mahdidev3/devmode_project.git
+git push -u origin master
 ```
 
 ------------------------------------------------------------------------
@@ -263,7 +263,7 @@ git push -u origin main
 Clone the repository.
 
 ``` bash
-git clone <your-github-repo-url>
+git clone https://github.com/mahdidev3/devmode_project.git
 cd devmode_project
 ```
 
