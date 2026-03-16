@@ -92,6 +92,26 @@ python3 project_manager.py restart Devmode4
 
 ------------------------------------------------------------------------
 
+
+## Port allocation model
+
+- Auth-enabled services (for example Devmode1/2) now run one listening port per user.
+- Use `set-user-port` to pin a user to a fixed port or `random-user-port` to regenerate a random port.
+- Non-auth services (for example Devmode3/4/5) support replicas using `DEVMODE*_REPLICAS` and the `set-replicas` command.
+- Each replica can be pinned with `set-replica-port` or randomized with `random-replica-port`.
+
+``` bash
+python3 project_manager.py set-user-port Devmode1 alice 31001 --restart
+python3 project_manager.py random-user-port Devmode1 alice --restart
+python3 project_manager.py set-replicas Devmode3 3 --restart
+python3 project_manager.py set-replica-port Devmode3 2 32002 --restart
+python3 project_manager.py random-replica-port Devmode3 2 --restart
+```
+
+`status` now prints all active instances/ports for every mode.
+
+------------------------------------------------------------------------
+
 # 3. Status
 
 Check status of all Devmodes.

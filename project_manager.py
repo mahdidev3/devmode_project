@@ -220,6 +220,39 @@ def build_parser() -> argparse.ArgumentParser:
     load_env = sub.add_parser("load-env", help="Print shell export commands for .env")
     load_env.set_defaults(func=lambda args: forward_to_core(["load-env"]))
 
+
+    set_user_port = sub.add_parser("set-user-port", help="Assign fixed port for an authenticated user")
+    set_user_port.add_argument("target")
+    set_user_port.add_argument("username")
+    set_user_port.add_argument("port")
+    set_user_port.add_argument("--restart", action="store_true")
+    set_user_port.set_defaults(func=lambda args: forward_to_core(["set-user-port", args.target, args.username, args.port] + (["--restart"] if args.restart else [])))
+
+    random_user_port = sub.add_parser("random-user-port", help="Reassign an authenticated user to a random port")
+    random_user_port.add_argument("target")
+    random_user_port.add_argument("username")
+    random_user_port.add_argument("--restart", action="store_true")
+    random_user_port.set_defaults(func=lambda args: forward_to_core(["random-user-port", args.target, args.username] + (["--restart"] if args.restart else [])))
+
+    set_replicas = sub.add_parser("set-replicas", help="Set replica count for non-auth modes")
+    set_replicas.add_argument("target")
+    set_replicas.add_argument("replicas")
+    set_replicas.add_argument("--restart", action="store_true")
+    set_replicas.set_defaults(func=lambda args: forward_to_core(["set-replicas", args.target, args.replicas] + (["--restart"] if args.restart else [])))
+
+    set_replica_port = sub.add_parser("set-replica-port", help="Assign fixed port to replica index")
+    set_replica_port.add_argument("target")
+    set_replica_port.add_argument("replica")
+    set_replica_port.add_argument("port")
+    set_replica_port.add_argument("--restart", action="store_true")
+    set_replica_port.set_defaults(func=lambda args: forward_to_core(["set-replica-port", args.target, args.replica, args.port] + (["--restart"] if args.restart else [])))
+
+    random_replica_port = sub.add_parser("random-replica-port", help="Reassign replica index to random port")
+    random_replica_port.add_argument("target")
+    random_replica_port.add_argument("replica")
+    random_replica_port.add_argument("--restart", action="store_true")
+    random_replica_port.set_defaults(func=lambda args: forward_to_core(["random-replica-port", args.target, args.replica] + (["--restart"] if args.restart else [])))
+
     doctor = sub.add_parser("doctor", help="Validate common project requirements")
     doctor.set_defaults(func=cmd_doctor)
 

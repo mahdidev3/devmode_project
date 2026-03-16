@@ -35,6 +35,7 @@ class AppConfig:
     auth_enabled: bool
     host: str
     port: int
+    replicas: int
     state_dir: Path
     pid_file: Path
     port_file: Path
@@ -49,6 +50,7 @@ class AppConfig:
     upstream_port: Optional[int]
     upstream_username: Optional[str]
     upstream_password: Optional[str]
+    allowed_user: Optional[str]
 
     @property
     def tls_enabled(self) -> bool:
@@ -77,6 +79,7 @@ class ProjectConfig:
         state_dir = self.state_root / app_key
         host = self.env.get(f"{env_prefix}_HOST", self.env.get("DEVMODE_BIND_HOST", "0.0.0.0"))
         port = int(self.env.get(f"{env_prefix}_PORT", "0"))
+        replicas = int(self.env.get(f"{env_prefix}_REPLICAS", "1"))
         enabled = _bool(self.env.get(f"{env_prefix}_ENABLED", "true"), True)
         auth_enabled = _bool(self.env.get(f"{env_prefix}_AUTH_ENABLED", str(spec["auth_enabled"]).lower()), spec["auth_enabled"])
         listen_scheme = self.env.get(f"{env_prefix}_SCHEME", spec["listen_scheme"]).lower()
@@ -103,6 +106,7 @@ class ProjectConfig:
             auth_enabled=auth_enabled,
             host=host,
             port=port,
+            replicas=max(1, replicas),
             state_dir=state_dir,
             pid_file=state_dir / "app.pid",
             port_file=state_dir / "app.port",
@@ -117,6 +121,7 @@ class ProjectConfig:
             upstream_port=upstream_port,
             upstream_username=self.env.get(f"{env_prefix}_UPSTREAM_USERNAME"),
             upstream_password=self.env.get(f"{env_prefix}_UPSTREAM_PASSWORD"),
+            allowed_user=self.env.get(f"{env_prefix}_ALLOWED_USER") or None,
         )
 
     def all_apps(self) -> List[AppConfig]:
