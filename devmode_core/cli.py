@@ -1,4 +1,3 @@
-\
 import argparse
 import json
 import os
@@ -6,11 +5,19 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import List
 
 from .config import AppConfig, load_config
-from .manage_mode import resolve_app_name, start_mode, stop_mode
-from .runtime import is_pid_running, read_json_file
+from .manage_mode import (
+    _load_instances,
+    resolve_app_name,
+    set_replica_count,
+    set_replica_port,
+    set_user_port,
+    start_mode,
+    stop_mode,
+)
+from .runtime import is_pid_running
 from .userdb import UserDB
 
 
@@ -120,33 +127,36 @@ def cmd_status(args) -> int:
     config = load_config(project_root())
     rows = []
     for app in config.all_apps():
-        info = read_json_file(app.info_file)
-        running = False
-        if info and "pid" in info:
-            running = is_pid_running(int(info["pid"]))
-        row = {
-            "app": app.app_name,
-            "enabled": app.enabled,
-            "running": running,
-            "scheme": app.listen_scheme,
-            "auth_enabled": app.auth_enabled,
-            "mode_kind": app.mode_kind,
-            "host": info["host"] if running and info else app.host,
-            "port": info["port"] if running and info else app.port,
-            "pid": info["pid"] if running and info else None,
-            "upstream_url": app.upstream_url,
-        }
-        rows.append(row)
+        instances = _load_instances(app)
+        active = [row for row in instances if row.get("pid") and is_pid_running(int(row["pid"]))]
+        rows.append(
+            {
+                "app": app.app_name,
+                "enabled": app.enabled,
+                "running": bool(active),
+                "scheme": app.listen_scheme,
+                "auth_enabled": app.auth_enabled,
+                "mode_kind": app.mode_kind,
+                "replicas": app.replicas,
+                "instances": active,
+                "upstream_url": app.upstream_url,
+            }
+        )
     if args.json:
         print(json.dumps(rows, indent=2))
         return 0
     for row in rows:
         print(
             f"{row['app']}: enabled={row['enabled']} running={row['running']} "
-            f"scheme={row['scheme']} auth={row['auth_enabled']} "
-            f"host={row['host']} port={row['port']} pid={row['pid']} "
+            f"scheme={row['scheme']} auth={row['auth_enabled']} replicas={row['replicas']} "
             f"mode={row['mode_kind']} upstream={row['upstream_url']}"
         )
+        for instance in row["instances"]:
+            extra = f" user={instance.get('username')}" if instance.get("username") else f" replica={instance.get('replica')}"
+            print(
+                f"  - instance={instance.get('instance_id')} host={instance.get('host')} "
+                f"port={instance.get('port')} pid={instance.get('pid')}{extra}"
+            )
     return 0
 
 
@@ -157,12 +167,9 @@ def _user_apps(config, target: str) -> List[AppConfig]:
 
 def cmd_add_user(args) -> int:
     config = load_config(project_root())
-    password = args.password
-    if not password:
-        raise SystemExit("--password is required for non-interactive add-user")
     for app in _user_apps(config, args.target):
         userdb = UserDB(app.users_file)
-        userdb.add_user(args.username, password)
+        userdb.add_user(args.username, args.password)
         print(f"saved user in {app.app_name}: {args.username}")
     return 0
 
@@ -181,8 +188,6 @@ def cmd_remove_user(args) -> int:
 
 def cmd_passwd(args) -> int:
     config = load_config(project_root())
-    if not args.password:
-        raise SystemExit("--password is required for non-interactive passwd")
     for app in _user_apps(config, args.target):
         userdb = UserDB(app.users_file)
         try:
@@ -199,6 +204,57 @@ def cmd_list_users(args) -> int:
         print(f"[{app.app_name}]")
         for username in UserDB(app.users_file).list_users():
             print(username)
+    return 0
+
+
+def cmd_set_user_port(args) -> int:
+    config = load_config(project_root())
+    app = config.app(resolve_app_name(args.target))
+    set_user_port(app, args.username, args.port, randomize=False)
+    print(f"Set {app.app_name} user={args.username} port={args.port}")
+    if args.restart:
+        return start_mode(app)
+    return 0
+
+
+def cmd_random_user_port(args) -> int:
+    config = load_config(project_root())
+    app = config.app(resolve_app_name(args.target))
+    set_user_port(app, args.username, 0, randomize=True)
+    print(f"Set {app.app_name} user={args.username} port=random")
+    if args.restart:
+        return start_mode(app)
+    return 0
+
+
+def cmd_set_replicas(args) -> int:
+    config = load_config(project_root())
+    app = config.app(resolve_app_name(args.target))
+    set_replica_count(app, args.replicas)
+    print(f"Set {app.app_name} replicas={args.replicas}")
+    if args.restart:
+        app = load_config(project_root()).app(app.app_key)
+        return start_mode(app)
+    return 0
+
+
+def cmd_set_replica_port(args) -> int:
+    config = load_config(project_root())
+    app = config.app(resolve_app_name(args.target))
+    set_replica_port(app, args.replica, args.port)
+    print(f"Set {app.app_name} replica={args.replica} port={args.port}")
+    if args.restart:
+        return start_mode(app)
+    return 0
+
+
+def cmd_random_replica_port(args) -> int:
+    config = load_config(project_root())
+    app = config.app(resolve_app_name(args.target))
+    set_replica_port(app, args.replica, 0, randomize=True)
+    print(f"Set {app.app_name} replica={args.replica} port=random")
+    if args.restart:
+        return start_mode(app)
     return 0
 
 
@@ -283,6 +339,38 @@ def build_parser() -> argparse.ArgumentParser:
     list_users = sub.add_parser("list-users")
     list_users.add_argument("target", nargs="?", default="all")
     list_users.set_defaults(func=cmd_list_users)
+
+    set_user_port_cmd = sub.add_parser("set-user-port")
+    set_user_port_cmd.add_argument("target")
+    set_user_port_cmd.add_argument("username")
+    set_user_port_cmd.add_argument("port", type=int)
+    set_user_port_cmd.add_argument("--restart", action="store_true")
+    set_user_port_cmd.set_defaults(func=cmd_set_user_port)
+
+    random_user_port_cmd = sub.add_parser("random-user-port")
+    random_user_port_cmd.add_argument("target")
+    random_user_port_cmd.add_argument("username")
+    random_user_port_cmd.add_argument("--restart", action="store_true")
+    random_user_port_cmd.set_defaults(func=cmd_random_user_port)
+
+    set_replicas_cmd = sub.add_parser("set-replicas")
+    set_replicas_cmd.add_argument("target")
+    set_replicas_cmd.add_argument("replicas", type=int)
+    set_replicas_cmd.add_argument("--restart", action="store_true")
+    set_replicas_cmd.set_defaults(func=cmd_set_replicas)
+
+    set_replica_port_cmd = sub.add_parser("set-replica-port")
+    set_replica_port_cmd.add_argument("target")
+    set_replica_port_cmd.add_argument("replica", type=int)
+    set_replica_port_cmd.add_argument("port", type=int)
+    set_replica_port_cmd.add_argument("--restart", action="store_true")
+    set_replica_port_cmd.set_defaults(func=cmd_set_replica_port)
+
+    random_replica_port_cmd = sub.add_parser("random-replica-port")
+    random_replica_port_cmd.add_argument("target")
+    random_replica_port_cmd.add_argument("replica", type=int)
+    random_replica_port_cmd.add_argument("--restart", action="store_true")
+    random_replica_port_cmd.set_defaults(func=cmd_random_replica_port)
 
     edit_env = sub.add_parser("edit-env")
     edit_env.set_defaults(func=cmd_edit_env)

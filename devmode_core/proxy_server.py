@@ -61,7 +61,11 @@ class BaseConnection:
 
     def _is_authorized(self, headers: Dict[str, str]) -> bool:
         username, password = decode_basic_auth(headers)
-        return bool(username) and password is not None and self.userdb.verify(username, password)
+        if not (username and password is not None and self.userdb.verify(username, password)):
+            return False
+        if self.config.allowed_user and username != self.config.allowed_user:
+            return False
+        return True
 
     async def _send_auth_required(self) -> None:
         body = f"Authentication required for {self.config.app_name}.\n".encode("utf-8")
@@ -306,12 +310,17 @@ class ProxyServer:
 
     def write_state(self, port: int) -> None:
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
-        self.config.pid_file.write_text(str(os.getpid()), encoding="utf-8")
-        self.config.port_file.write_text(str(port), encoding="utf-8")
+        instance_info_file = Path(os.environ.get("DEVMODE_INSTANCE_INFO_FILE", str(self.config.info_file)))
+        instance_log_file = Path(os.environ.get("DEVMODE_INSTANCE_LOG_FILE", str(self.config.log_file)))
+        instance_id = os.environ.get("DEVMODE_INSTANCE_ID", "default")
+        if instance_info_file == self.config.info_file:
+            self.config.pid_file.write_text(str(os.getpid()), encoding="utf-8")
+            self.config.port_file.write_text(str(port), encoding="utf-8")
         write_info_file(
-            self.config.info_file,
+            instance_info_file,
             {
                 "app": self.config.app_name,
+                "instance_id": instance_id,
                 "app_key": self.config.app_key,
                 "mode_kind": self.config.mode_kind,
                 "scheme": self.config.listen_scheme,
@@ -320,11 +329,12 @@ class ProxyServer:
                 "host": self.config.host,
                 "port": port,
                 "run_dir": str(self.config.state_dir),
-                "log_file": str(self.config.log_file),
+                "log_file": str(instance_log_file),
                 "users_file": str(self.config.users_file),
                 "tls_cert": str(self.config.tls_cert) if self.config.tls_cert else None,
                 "tls_key": str(self.config.tls_key) if self.config.tls_key else None,
                 "upstream_url": self.config.upstream_url,
+                "allowed_user": self.config.allowed_user,
             },
         )
 
@@ -366,7 +376,11 @@ class ProxyServer:
         finally:
             server.close()
             await server.wait_closed()
-            remove_state_files(self.config.pid_file, self.config.port_file, self.config.info_file)
+            instance_info_file = Path(os.environ.get("DEVMODE_INSTANCE_INFO_FILE", str(self.config.info_file)))
+            if instance_info_file == self.config.info_file:
+                remove_state_files(self.config.pid_file, self.config.port_file, self.config.info_file)
+            else:
+                remove_state_files(instance_info_file)
 
 
 def run_server(config: AppConfig) -> None:
