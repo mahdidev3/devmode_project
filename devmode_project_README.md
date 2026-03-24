@@ -101,12 +101,16 @@ python3 project_manager.py restart Devmode4
 - Each replica can be pinned with `set-replica-port` or randomized with `random-replica-port`.
 
 ``` bash
-python3 project_manager.py set-user-port Devmode1 alice 31001 --restart
-python3 project_manager.py random-user-port Devmode1 alice --restart
+python3 project_manager.py set-user-port Devmode1 alice 31001
+python3 project_manager.py random-user-port Devmode1 alice
 python3 project_manager.py set-replicas Devmode3 3 --restart
 python3 project_manager.py set-replica-port Devmode3 2 32002 --restart
 python3 project_manager.py random-replica-port Devmode3 2 --restart
 ```
+
+For auth-enabled services, user-port changes are applied immediately when the
+mode is already running. You can still pass `--restart` to force a full
+restart flow.
 
 `status` now prints all active instances/ports for every mode.
 
@@ -129,6 +133,10 @@ Add a user
 ``` bash
 python3 project_manager.py add-user Devmode1 alice --password secret123
 ```
+
+When the target auth-enabled mode is running, `add-user` now automatically:
+- assigns a random port for the new user
+- starts only the new user instance immediately (existing users keep their current ports)
 
 Remove a user
 

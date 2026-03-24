@@ -267,6 +267,62 @@ def stop_mode(config: AppConfig, timeout: float = 8.0) -> int:
     return rc
 
 
+def reconcile_user_instance(config: AppConfig, username: str, force_restart: bool = False) -> int:
+    if not config.auth_enabled:
+        raise ValueError(f"{config.app_name} does not use user-based auth")
+
+    instances = _load_instances(config)
+    alive_instances: List[Dict] = []
+    running_any = False
+    target_id = _instance_id_for_user(username)
+    current_target: Optional[Dict] = None
+
+    for row in instances:
+        pid = int(row.get("pid", 0) or 0)
+        if pid > 0 and is_pid_running(pid):
+            running_any = True
+            if row.get("instance_id") == target_id:
+                current_target = row
+            else:
+                alive_instances.append(row)
+
+    if not running_any:
+        _save_instances(config, alive_instances + ([current_target] if current_target else []))
+        return 0
+
+    desired_port = int(_load_user_ports(config).get(username, 0))
+    if current_target and not force_restart:
+        alive_instances.append(current_target)
+        _save_instances(config, alive_instances)
+        return 0
+
+    if current_target:
+        _stop_instance_pid(current_target)
+
+    if _launch_instance(config, target_id, config.host, desired_port, username) != 0:
+        print(f"Failed to start {config.app_name} instance {target_id}", file=sys.stderr)
+        _save_instances(config, alive_instances)
+        return 1
+
+    info = read_json_file(config.state_dir / f"{target_id.replace(':', '_')}.json") or {}
+    row = {
+        "instance_id": target_id,
+        "pid": info.get("pid"),
+        "host": info.get("host", config.host),
+        "port": info.get("port", desired_port),
+        "username": username,
+        "replica": None,
+        "info_file": str(config.state_dir / f"{target_id.replace(':', '_')}.json"),
+        "log_file": str(config.state_dir / f"{target_id.replace(':', '_')}.log"),
+    }
+    alive_instances.append(row)
+    _save_instances(config, alive_instances)
+    print(
+        f"STARTED APP={config.app_name} INSTANCE={target_id} PID={row['pid']} HOST={row['host']} PORT={row['port']}"
+    )
+    return 0
+
+
 def set_user_port(config: AppConfig, username: str, port: int, randomize: bool = False) -> None:
     if not config.auth_enabled:
         raise ValueError(f"{config.app_name} does not use user-based auth")
@@ -327,8 +383,11 @@ def manage_users_main(script_path: Path, mode_name: str, argv: Optional[List[str
         if not password:
             raise SystemExit("password can not be empty")
         userdb.add_user(args.username, password)
+        set_user_port(app, args.username, 0, randomize=True)
         print(f"saved user in {app.app_name}: {args.username}")
-        return 0
+        print(f"assigned random port for {app.app_name} user={args.username}")
+
+        return reconcile_user_instance(app, args.username, force_restart=False)
 
     if args.command == "remove":
         try:
