@@ -185,7 +185,7 @@ def cmd_add_user(args) -> int:
         print(f"assigned random port for {app.app_name} user={args.username}")
 
         if _has_running_instances(app):
-            rc |= start_mode(app)
+            rc |= reconcile_user_instance(app, args.username, force_restart=True)
     return rc
 
 
@@ -227,7 +227,7 @@ def cmd_set_user_port(args) -> int:
     app = config.app(resolve_app_name(args.target))
     set_user_port(app, args.username, args.port, randomize=False)
     print(f"Set {app.app_name} user={args.username} port={args.port}")
-    if args.restart or _has_running_instances(app):
+    if args.restart:
         return start_mode(app)
     if _has_running_instances(app):
         return reconcile_user_instance(app, args.username, force_restart=True)
@@ -239,7 +239,7 @@ def cmd_random_user_port(args) -> int:
     app = config.app(resolve_app_name(args.target))
     set_user_port(app, args.username, 0, randomize=True)
     print(f"Set {app.app_name} user={args.username} port=random")
-    if args.restart or _has_running_instances(app):
+    if args.restart:
         return start_mode(app)
     if _has_running_instances(app):
         return reconcile_user_instance(app, args.username, force_restart=True)
