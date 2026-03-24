@@ -10,6 +10,7 @@ from typing import List
 from .config import AppConfig, load_config
 from .manage_mode import (
     _load_instances,
+    reconcile_user_instance,
     resolve_app_name,
     set_replica_count,
     set_replica_port,
@@ -228,6 +229,8 @@ def cmd_set_user_port(args) -> int:
     print(f"Set {app.app_name} user={args.username} port={args.port}")
     if args.restart or _has_running_instances(app):
         return start_mode(app)
+    if _has_running_instances(app):
+        return reconcile_user_instance(app, args.username, force_restart=True)
     return 0
 
 
@@ -238,6 +241,8 @@ def cmd_random_user_port(args) -> int:
     print(f"Set {app.app_name} user={args.username} port=random")
     if args.restart or _has_running_instances(app):
         return start_mode(app)
+    if _has_running_instances(app):
+        return reconcile_user_instance(app, args.username, force_restart=True)
     return 0
 
 
