@@ -387,7 +387,9 @@ def manage_users_main(script_path: Path, mode_name: str, argv: Optional[List[str
         print(f"saved user in {app.app_name}: {args.username}")
         print(f"assigned random port for {app.app_name} user={args.username}")
 
-        return reconcile_user_instance(app, args.username, force_restart=False)
+        if any(int(row.get("pid", 0) or 0) > 0 and is_pid_running(int(row.get("pid", 0) or 0)) for row in _load_instances(app)):
+            return start_mode(app)
+        return 0
 
     if args.command == "remove":
         try:

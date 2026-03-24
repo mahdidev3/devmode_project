@@ -136,7 +136,7 @@ python3 project_manager.py add-user Devmode1 alice --password secret123
 
 When the target auth-enabled mode is running, `add-user` now automatically:
 - assigns a random port for the new user
-- starts only the new user instance immediately (existing users keep their current ports)
+- applies the new user instance immediately without manual restart
 
 Remove a user
 
