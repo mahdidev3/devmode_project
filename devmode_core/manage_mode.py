@@ -327,7 +327,12 @@ def manage_users_main(script_path: Path, mode_name: str, argv: Optional[List[str
         if not password:
             raise SystemExit("password can not be empty")
         userdb.add_user(args.username, password)
+        set_user_port(app, args.username, 0, randomize=True)
         print(f"saved user in {app.app_name}: {args.username}")
+        print(f"assigned random port for {app.app_name} user={args.username}")
+
+        if any(int(row.get("pid", 0) or 0) > 0 and is_pid_running(int(row.get("pid", 0) or 0)) for row in _load_instances(app)):
+            return start_mode(app)
         return 0
 
     if args.command == "remove":

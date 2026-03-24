@@ -165,13 +165,27 @@ def _user_apps(config, target: str) -> List[AppConfig]:
     return [app for app in apps if app.auth_enabled]
 
 
+def _has_running_instances(app: AppConfig) -> bool:
+    for row in _load_instances(app):
+        pid = int(row.get("pid", 0) or 0)
+        if pid > 0 and is_pid_running(pid):
+            return True
+    return False
+
+
 def cmd_add_user(args) -> int:
     config = load_config(project_root())
+    rc = 0
     for app in _user_apps(config, args.target):
         userdb = UserDB(app.users_file)
         userdb.add_user(args.username, args.password)
         print(f"saved user in {app.app_name}: {args.username}")
-    return 0
+        set_user_port(app, args.username, 0, randomize=True)
+        print(f"assigned random port for {app.app_name} user={args.username}")
+
+        if _has_running_instances(app):
+            rc |= start_mode(app)
+    return rc
 
 
 def cmd_remove_user(args) -> int:
@@ -212,7 +226,7 @@ def cmd_set_user_port(args) -> int:
     app = config.app(resolve_app_name(args.target))
     set_user_port(app, args.username, args.port, randomize=False)
     print(f"Set {app.app_name} user={args.username} port={args.port}")
-    if args.restart:
+    if args.restart or _has_running_instances(app):
         return start_mode(app)
     return 0
 
@@ -222,7 +236,7 @@ def cmd_random_user_port(args) -> int:
     app = config.app(resolve_app_name(args.target))
     set_user_port(app, args.username, 0, randomize=True)
     print(f"Set {app.app_name} user={args.username} port=random")
-    if args.restart:
+    if args.restart or _has_running_instances(app):
         return start_mode(app)
     return 0
 
